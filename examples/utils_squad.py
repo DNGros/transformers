@@ -28,6 +28,7 @@ from transformers.tokenization_bert import BasicTokenizer, whitespace_tokenize
 
 # Required by XLNet evaluation method to compute optimal threshold (see write_predictions_extended() method)
 from utils_squad_evaluate import find_all_best_thresh_v2, make_qid_to_has_ans, get_raw_scores
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +201,10 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     # max_N, max_M = 1024, 1024
     # f = np.zeros((max_N, max_M), dtype=np.float32)
 
+    num_queries_too_long = 0
+    num_seqs_too_long = 0
     features = []
-    for (example_index, example) in enumerate(examples):
+    for (example_index, example) in tqdm(list(enumerate(examples))):
 
         # if example_index % 100 == 0:
         #     logger.info('Converting %s/%s pos %s neg %s', example_index, len(examples), cnt_pos, cnt_neg)
@@ -210,6 +213,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
+            num_queries_too_long += 1
 
         tok_to_orig_index = []
         orig_to_tok_index = []
@@ -238,6 +242,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
+        if len(all_doc_tokens) > max_tokens_for_doc:
+            num_seqs_too_long += 1
 
         # We can have documents that are longer than the maximum sequence length.
         # To deal with this we do a sliding window approach, where we take chunks
@@ -394,6 +400,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     is_impossible=span_is_impossible))
             unique_id += 1
 
+    logger.info(
+        f"Finished loading. Found {len(features)} examples. {num_queries_too_long} questions "
+        f"truncated on length and {num_seqs_too_long} doc seqs had to be broken up")
     return features
 
 
